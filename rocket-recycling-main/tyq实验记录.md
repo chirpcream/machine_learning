@@ -197,3 +197,71 @@ put_text(canvas, "wind @ h = %.1f m" % h_wind, pt)
 
 ```
 
+训练之后第一次reward比之前好了很多，我不是很懂，但是gpt这么说
+
+<img src="tyq实验记录.assets/image-20250613051457553.png" alt="image-20250613051457553" style="zoom:50%;" />
+
+<img src="tyq实验记录.assets/image-20250613051435392.png" alt="image-20250613051435392" style="zoom:50%;" />
+
+<img src="tyq实验记录.assets/image-20250613051520902.png" alt="image-20250613051520902" style="zoom:50%;" />
+
+##### 解决问题：每轮开始时火箭“油量是上轮剩下的”
+
+## policy.py
+
+原来的policy代码保存在副本里了
+
+##### Entropy Loss 
+
+鼓励策略在训练初期保持对动作的多样性探索。强化学习常常面临“早收敛”的问题，策略在尚未充分尝试所有可能动作之前就锁定在某个次优策略上，导致泛化能力差。通过对策略输出的动作分布计算熵值，并在损失函数中给予一定权重的正向奖励，可以有效防止策略过早变得过于保守，使其在面对复杂环境扰动（如风力、燃料变化）时仍具备探索能力，从而学到更稳健的控制策略。
+
+```python
+entropy = -(log_probs * torch.exp(log_probs)).sum()
+actor_loss = (-log_probs * advantage.detach()).mean() - 0.001 * entropy
+```
+
+##### Layer Normalization（层归一化）
+
+提升训练过程的稳定性
+
+```python
+    def __init__(self, input_dim, output_dim):
+        super().__init__()
+
+        self.mapping = PositionalMapping(input_dim=input_dim, L=7)
+
+        h_dim = 128
+        # tyq
+        self.linear1 = nn.Linear(self.mapping.output_dim, h_dim)
+        self.norm1 = nn.LayerNorm(h_dim)
+        self.linear2 = nn.Linear(h_dim, h_dim)
+        self.norm2 = nn.LayerNorm(h_dim)
+        self.linear3 = nn.Linear(h_dim, h_dim)
+        self.norm3 = nn.LayerNorm(h_dim)
+        self.linear4 = nn.Linear(h_dim, output_dim)
+        self.relu = nn.LeakyReLU(0.2)
+
+        # self.linear1 = nn.Linear(in_features=self.mapping.output_dim, out_features=h_dim, bias=True)
+        # self.linear2 = nn.Linear(in_features=h_dim, out_features=h_dim, bias=True)
+        # self.linear3 = nn.Linear(in_features=h_dim, out_features=h_dim, bias=True)
+        # self.linear4 = nn.Linear(in_features=h_dim, out_features=output_dim, bias=True)
+        # self.relu = nn.LeakyReLU(0.2)
+
+    def forward(self, x):
+        # shape x: 1 x m_token x m_state
+        # x = x.view([1, -1])
+        # x = self.mapping(x)
+        # x = self.relu(self.linear1(x))
+        # x = self.relu(self.linear2(x))
+        # x = self.relu(self.linear3(x))
+        # x = self.linear4(x)
+        # tyq
+        x = x.view([1, -1])
+        x = self.mapping(x)
+        x = self.relu(self.norm1(self.linear1(x)))
+        x = self.relu(self.norm2(self.linear2(x)))
+        x = self.relu(self.norm3(self.linear3(x)))
+        x = self.linear4(x)
+        return x
+```
+

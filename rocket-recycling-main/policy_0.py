@@ -62,36 +62,19 @@ class MLP(nn.Module):
         self.mapping = PositionalMapping(input_dim=input_dim, L=7)
 
         h_dim = 128
-        # tyq
-        self.linear1 = nn.Linear(self.mapping.output_dim, h_dim)
-        self.norm1 = nn.LayerNorm(h_dim)
-        self.linear2 = nn.Linear(h_dim, h_dim)
-        self.norm2 = nn.LayerNorm(h_dim)
-        self.linear3 = nn.Linear(h_dim, h_dim)
-        self.norm3 = nn.LayerNorm(h_dim)
-        self.linear4 = nn.Linear(h_dim, output_dim)
+        self.linear1 = nn.Linear(in_features=self.mapping.output_dim, out_features=h_dim, bias=True)
+        self.linear2 = nn.Linear(in_features=h_dim, out_features=h_dim, bias=True)
+        self.linear3 = nn.Linear(in_features=h_dim, out_features=h_dim, bias=True)
+        self.linear4 = nn.Linear(in_features=h_dim, out_features=output_dim, bias=True)
         self.relu = nn.LeakyReLU(0.2)
-
-        # self.linear1 = nn.Linear(in_features=self.mapping.output_dim, out_features=h_dim, bias=True)
-        # self.linear2 = nn.Linear(in_features=h_dim, out_features=h_dim, bias=True)
-        # self.linear3 = nn.Linear(in_features=h_dim, out_features=h_dim, bias=True)
-        # self.linear4 = nn.Linear(in_features=h_dim, out_features=output_dim, bias=True)
-        # self.relu = nn.LeakyReLU(0.2)
 
     def forward(self, x):
         # shape x: 1 x m_token x m_state
-        # x = x.view([1, -1])
-        # x = self.mapping(x)
-        # x = self.relu(self.linear1(x))
-        # x = self.relu(self.linear2(x))
-        # x = self.relu(self.linear3(x))
-        # x = self.linear4(x)
-        # tyq
         x = x.view([1, -1])
         x = self.mapping(x)
-        x = self.relu(self.norm1(self.linear1(x)))
-        x = self.relu(self.norm2(self.linear2(x)))
-        x = self.relu(self.norm3(self.linear3(x)))
+        x = self.relu(self.linear1(x))
+        x = self.relu(self.linear2(x))
+        x = self.relu(self.linear3(x))
         x = self.linear4(x)
         return x
 
@@ -149,10 +132,7 @@ class ActorCritic(nn.Module):
         values = torch.stack(values)
 
         advantage = Qvals - values
-        # tyq
-        entropy = -(log_probs * torch.exp(log_probs)).sum()
-        actor_loss = (-log_probs * advantage.detach()).mean() - 0.001 * entropy
-        #actor_loss = (-log_probs * advantage.detach()).mean()
+        actor_loss = (-log_probs * advantage.detach()).mean()
         critic_loss = 0.5 * advantage.pow(2).mean()
         ac_loss = actor_loss + critic_loss
 

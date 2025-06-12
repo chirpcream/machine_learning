@@ -71,6 +71,13 @@ class Rocket(object):
 
         self.state_buffer = []
 
+        # tyq
+        self.wind_enabled = True
+        self.wind_force_max = 3.0  # 单位 N，最大横向风力
+        self.mass_init = 100.0  # 火箭总质量
+        self.fuel_mass = 30.0  # 可燃烧燃料
+        self.fuel_consumption_rate = 0.1  # 每次推力所耗 kg
+
 
     def reset(self, state_dict=None):
 
@@ -210,6 +217,10 @@ class Rocket(object):
         if self.task == 'landing' and self.already_landing:
             reward = (1.0 + 5*np.exp(-1*v/10.))*(self.max_steps - self.step_id)
 
+        # tyq
+        if self.task == 'landing' and self.already_landing:
+            reward += 0.1 * (self.fuel_mass / 30.0)
+
         return reward
 
     def step(self, action):
@@ -220,12 +231,27 @@ class Rocket(object):
 
         f, vphi = self.action_table[action]
 
+        # 推力消耗燃料 tyq
+        if f > 0:
+            self.fuel_mass -= self.fuel_consumption_rate * (f / self.g)  # 简单按推力归一化计算
+            self.fuel_mass = max(self.fuel_mass, 0)  # 避免为负
+
         ft, fr = -f*np.sin(phi), f*np.cos(phi)
         fx = ft*np.cos(theta) - fr*np.sin(theta)
         fy = ft*np.sin(theta) + fr*np.cos(theta)
 
         rho = 1 / (125/(self.g/2.0))**0.5  # suppose after 125 m free fall, then air resistance = mg
-        ax, ay = fx-rho*vx, fy-self.g-rho*vy
+        #ax, ay = fx-rho*vx, fy-self.g-rho*vy tyq
+        mass = self.mass_init - self.fuel_mass
+        mass = max(mass, 10.0)  # 防止质量为负
+        wind_force = 0.0
+        if self.wind_enabled:
+            wind_force = np.random.uniform(-self.wind_force_max, self.wind_force_max)
+
+        ax = (fx + wind_force - rho * vx) / mass
+        ay = (fy - self.g - rho * vy) / mass
+
+
         atheta = ft*self.H/2 / self.I
 
         # update agent

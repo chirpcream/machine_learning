@@ -13,8 +13,8 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 if __name__ == '__main__':
 
-    task = 'hover'  # 'hover' or 'landing'
-    rocket_type = 'falcon'  #SunYunru:考虑变量rocket_type:可以选'falcon'或'starship'
+    task = 'landing'  # 'hover' or 'landing'
+    rocket_type = 'starship'  #SunYunru:考虑变量rocket_type:可以选'falcon'或'starship'
     version = '_raw'  #SunYunru:增设变量version，方便对比不同修改下代码运行结果
     record_video = True  #SunYunru:增设变量record_video，确定是否保存视频
 

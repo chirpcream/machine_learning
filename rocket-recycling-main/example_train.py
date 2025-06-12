@@ -21,7 +21,12 @@ if __name__ == '__main__':
     max_m_episode = 20000  #SunYunru:改到20000轮训练
     max_steps = 800
 
-    env = Rocket(task=task, max_steps=max_steps, rocket_type=rocket_type)
+    #env = Rocket(task=task, max_steps=max_steps, rocket_type=rocket_type)
+    # tyq
+    env = Rocket(task=task, max_steps=max_steps, rocket_type=rocket_type,
+             wind_enabled=True, wind_force_max=2.0,
+             mass_init=120.0, fuel_mass=100.0)
+
     ckpt_folder = os.path.join('./', task + '_' + rocket_type + version + '_ckpt')
     if not os.path.exists(ckpt_folder):
         os.mkdir(ckpt_folder)

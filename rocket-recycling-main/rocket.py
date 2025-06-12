@@ -30,7 +30,7 @@ class Rocket(object):
     def __init__(self, max_steps, task='hover', rocket_type='falcon',
                  viewport_h=768, path_to_bg_img=None,
                  wind_enabled=True, wind_force_max=3.0,  #tyq
-             mass_init=100.0, fuel_mass=90.0, fuel_consumption_rate=0.1):
+             mass_init=100.0, fuel_mass=90.0, fuel_consumption_rate=0.02):
 
         self.task = task
         self.rocket_type = rocket_type
@@ -64,7 +64,7 @@ class Rocket(object):
         self.state = self.create_random_state()
         self.action_table = self.create_action_table()
 
-        self.state_dims = 8
+        self.state_dims = 10  # tyq 8 to 10
         self.action_dims = len(self.action_table)
 
         if path_to_bg_img is None:
@@ -244,11 +244,14 @@ class Rocket(object):
 
         rho = 1 / (125/(self.g/2.0))**0.5  # suppose after 125 m free fall, then air resistance = mg
         #ax, ay = fx-rho*vx, fy-self.g-rho*vy tyq
+        # tyq
         mass = self.mass_init - self.fuel_mass
         mass = max(mass, 10.0)  # 防止质量为负
         wind_force = 0.0
         if self.wind_enabled:
             wind_force = np.random.uniform(-self.wind_force_max, self.wind_force_max)
+
+        self._last_wind_force = wind_force
 
         ax = (fx + wind_force - rho * vx) / mass
         ay = (fy - self.g - rho * vy) / mass
@@ -285,18 +288,27 @@ class Rocket(object):
         self.already_crash = self.check_crash(self.state)
         reward = self.calculate_reward(self.state)
 
+        # 如果燃料为0认为坠毁    
+        if self.fuel_mass <= 0 and not self.already_landing:
+            self.already_crash = True    
+
         if self.already_crash or self.already_landing:
             done = True
         else:
             done = False
-
         return self.flatten(self.state), reward, done, None
 
     def flatten(self, state):
         x = [state['x'], state['y'], state['vx'], state['vy'],
              state['theta'], state['vtheta'], state['t'],
              state['phi']]
-        return np.array(x, dtype=np.float32)/100.
+        # tyq 加入燃料质量与步数归一化
+        x = np.array(x, dtype=np.float32)/100.
+        fuel_ratio = np.array([self.fuel_mass / self.mass_init], dtype=np.float32)
+        step_ratio = np.array([state['t'] / self.max_steps], dtype=np.float32)
+
+        return np.concatenate([x, fuel_ratio, step_ratio])
+        # return np.array(x, dtype=np.float32)/100.
 
     def render(self, window_name='env', wait_time=1,
                with_trajectory=True, with_camera_tracking=True,
@@ -537,6 +549,18 @@ class Rocket(object):
         pt = (10, 100)
         text = "a: %.2f degree, va: %.2f degree/s" % \
                (self.state['theta'] * 180 / np.pi, self.state['vtheta'] * 180 / np.pi)
+        put_text(canvas, text, pt)
+
+        # tyq 绘制风力和燃料剩余量
+        pt = (10, 120)
+        text = "fuel left: %.2f kg" % self.fuel_mass
+        put_text(canvas, text, pt)
+
+        pt = (10, 140)
+        if self.wind_enabled:
+            text = "wind force: %.2f N" % self._last_wind_force  # 自定义属性
+        else:
+            text = "wind force: OFF"
         put_text(canvas, text, pt)
 
 

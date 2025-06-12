@@ -283,3 +283,29 @@ actor_loss = (-log_probs * advantage.detach()).mean() - 0.001 * entropy
         return x
 ```
 
+## “推力变化惯性”机制
+
+模拟现实中火箭发动机推力不是瞬时切换的，而是有惯性，改变推力时会渐进调整。
+$$
+f_{t+1}=\beta \cdot f_{t0} +(1- \beta) \cdot f_{target},β∈[0.8,0.98]
+$$
+$f_{\text{target}}$：策略当前选择的推力
+
+$f_t$：当前真实推力值
+
+$\beta \in [0.8, 0.98]$：惯性权重
+
+```python
+        # tyq 推力惯性
+        # f, vphi = self.action_table[action]
+        f_target, vphi = self.action_table[action]
+
+        # 推力惯性参数
+        self._throttle_beta = 0.9 if not hasattr(self, '_throttle_beta') else self._throttle_beta
+        self.f = self.f if hasattr(self, 'f') else f_target  # 初始化上次推力
+
+        # 平滑更新推力（模拟推力惯性）
+        self.f = self._throttle_beta * self.f + (1 - self._throttle_beta) * f_target
+        f = self.f
+```
+

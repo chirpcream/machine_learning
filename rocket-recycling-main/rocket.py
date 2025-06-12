@@ -233,7 +233,18 @@ class Rocket(object):
         theta, vtheta = self.state['theta'], self.state['vtheta']
         phi = self.state['phi']
 
-        f, vphi = self.action_table[action]
+        # tyq 推力惯性
+        # f, vphi = self.action_table[action]
+        f_target, vphi = self.action_table[action]
+
+        # 推力惯性参数
+        self._throttle_beta = 0.9 if not hasattr(self, '_throttle_beta') else self._throttle_beta
+        self.f = self.f if hasattr(self, 'f') else f_target  # 初始化上次推力
+
+        # 平滑更新推力（模拟推力惯性）
+        self.f = self._throttle_beta * self.f + (1 - self._throttle_beta) * f_target
+        f = self.f
+
 
         # 推力消耗燃料 tyq
         if f > 0:
@@ -575,8 +586,13 @@ class Rocket(object):
         else:
             text = "wind force: OFF"
         put_text(canvas, text, pt)
-        pt = (10, 180)
+        pt = (10, 160)
         put_text(canvas, "wind_h = %.1f m" % self.h_wind, pt)  # 风吹的位置高度（相对质心）
+
+        # 绘制推力
+        pt = (10, 180)
+        put_text(canvas, "smoothed thrust: %.2f N" % self.f, pt)
+
 
 
     def draw_trajectory(self, canvas, color=(255, 0, 0)):

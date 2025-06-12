@@ -15,7 +15,7 @@ if __name__ == '__main__':
     version = '_raw'  #SunYunru:增设变量version，方便对比不同修改下代码运行结果
     record_video = True  #SunYunru:增设变量record_video，确定是否保存视频
     max_steps = 800
-    ckpt_folder = os.path.join('./', task + version + '_' + rocket_type + '_ckpt')
+    ckpt_folder = os.path.join('./', task + '_' + rocket_type + version + '_ckpt')
     ckpt_dir = glob.glob(os.path.join(ckpt_folder, '*.pt'))[-1]  # last ckpt
 
     env = Rocket(task=task, max_steps=max_steps, rocket_type=rocket_type)

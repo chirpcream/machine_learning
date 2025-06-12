@@ -110,7 +110,7 @@ venv.bak/
 .dmypy.json
 dmypy.json
 
-# Pyre type checker
+# Pyre type checker  #SunYunru:按需确定是否要上传照片、视频、权重等
 .pyre/
 
 .idea
@@ -122,3 +122,5 @@ TTT*
 rewards.jpg
 hover_ckpt
 landing_ckpt
+*.jpg
+# .gitignore

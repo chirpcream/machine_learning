@@ -66,7 +66,7 @@ class Rocket(object):
         self.action_dims = len(self.action_table)
 
         if path_to_bg_img is None:
-            path_to_bg_img = task+'.jpg'
+            path_to_bg_img = task + '.jpg'
         self.bg_img = utils.load_bg_img(path_to_bg_img, w=self.viewport_w, h=self.viewport_h)
 
         self.state_buffer = []

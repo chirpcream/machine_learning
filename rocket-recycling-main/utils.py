@@ -19,7 +19,7 @@ def moving_avg(x, N=500):
 def load_bg_img(path_to_img, w, h):
     bg_img = cv2.imread(path_to_img, cv2.IMREAD_COLOR)
     if bg_img is None:
-        sub_path = os.path.join("rocket-recycling-main", path_to_img)
+        sub_path = os.path.join("rocket-recycling-main", path_to_img)  #SunYunru:完善路径兼容性
         bg_img = cv2.imread(sub_path, cv2.IMREAD_COLOR)
     bg_img = cv2.cvtColor(bg_img, cv2.COLOR_BGR2RGB)
     bg_img = cv2.resize(bg_img, (w, h))

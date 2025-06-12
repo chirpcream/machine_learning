@@ -7,6 +7,7 @@ import utils
 import os
 import glob
 import cv2
+import csv #tyq
 
 # Decide which device we want to run on
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -30,6 +31,13 @@ if __name__ == '__main__':
     ckpt_folder = os.path.join('./', task + '_' + rocket_type + version + '_ckpt')
     if not os.path.exists(ckpt_folder):
         os.mkdir(ckpt_folder)
+
+        # 记录奖励情况 tyq
+    log_path = os.path.join(ckpt_folder, 'train_log.csv')
+    if not os.path.exists(log_path):
+        with open(log_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(['episode', 'reward', 'dist', 'pose', 'fuel_bonus', 'landing_bonus', 'crash_penalty', 'fuel_left', 'step', 'landed', 'crashed'])
 
     last_episode_id = 0
     REWARDS = []
@@ -73,6 +81,26 @@ if __name__ == '__main__':
         REWARDS.append(np.sum(rewards))
         print('episode id: %d, episode reward: %.3f'
               % (episode_id, np.sum(rewards)))
+        
+        # tyq 记录奖励
+        reward_parts = env._last_reward_parts if hasattr(env, '_last_reward_parts') else {}
+
+        with open(log_path, 'a', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                episode_id,
+                reward_parts.get('total_reward', 0),
+                reward_parts.get('dist_reward', 0),
+                reward_parts.get('pose_reward', 0),
+                reward_parts.get('fuel_bonus', 0),
+                reward_parts.get('landing_bonus', 0),
+                reward_parts.get('crash_penalty', 0),
+                reward_parts.get('fuel_left', 0),
+                reward_parts.get('step_id', 0),
+                reward_parts.get('landed', False),
+                reward_parts.get('crashed', False)
+            ])
+
 
         if episode_id % 100 == 1:
             plt.figure()

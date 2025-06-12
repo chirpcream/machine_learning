@@ -214,16 +214,34 @@ class Rocket(object):
             reward = 0.5
         if self.task == 'hover' and abs(state['theta']) > 90 / 180 * np.pi:
             reward = 0
+        
+        # 保存各个reward分量
+        landing_bonus = 0.0
+        crash_penalty = 0.0
+        fuel_bonus = 0.0
 
         v = (state['vx'] ** 2 + state['vy'] ** 2) ** 0.5
         if self.task == 'landing' and self.already_crash:
             reward = (reward + 5*np.exp(-1*v/10.)) * (self.max_steps - self.step_id)
+            reward = crash_penalty
         if self.task == 'landing' and self.already_landing:
             reward = (1.0 + 5*np.exp(-1*v/10.))*(self.max_steps - self.step_id)
+            reward = landing_bonus
+            fuel_bonus = 0.1 * (self.fuel_mass / 30.0)
+            reward += fuel_bonus
 
-        # tyq
-        if self.task == 'landing' and self.already_landing:
-            reward += 0.1 * (self.fuel_mass / 30.0)
+        self._last_reward_parts = {
+        'dist_reward': float(dist_reward),
+        'pose_reward': float(pose_reward),
+        'fuel_bonus': float(fuel_bonus),
+        'landing_bonus': float(landing_bonus),
+        'crash_penalty': float(crash_penalty),
+        'total_reward': float(reward),
+        'fuel_left': float(self.fuel_mass),
+        'step_id': self.step_id,
+        'landed': self.already_landing,
+        'crashed': self.already_crash
+        }
 
         return reward
 

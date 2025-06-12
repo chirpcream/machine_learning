@@ -18,7 +18,13 @@ if __name__ == '__main__':
     ckpt_folder = os.path.join('./', task + version + '_' + rocket_type + '_ckpt')
     ckpt_dir = glob.glob(os.path.join(ckpt_folder, '*.pt'))[-1]  # last ckpt
 
-    env = Rocket(task=task, max_steps=max_steps, rocket_type=rocket_type)
+    # tyq
+    env = Rocket(task='hover', max_steps=800, rocket_type='falcon',
+             wind_enabled=True,
+             wind_force_max=2.5,
+             fuel_mass=100.0,
+             mass_init=120.0,
+             fuel_consumption_rate=0.02)
     net = ActorCritic(input_dim=env.state_dims, output_dim=env.action_dims).to(device)
     if os.path.exists(ckpt_dir):
         checkpoint = torch.load(ckpt_dir, weights_only=False)  #SunYunru:兼容不同版本的pytorch

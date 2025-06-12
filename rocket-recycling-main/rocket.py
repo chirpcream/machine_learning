@@ -29,7 +29,7 @@ class Rocket(object):
 
     def __init__(self, max_steps, task='hover', rocket_type='falcon',
                  viewport_h=768, path_to_bg_img=None,
-                 wind_enabled=True, wind_force_max=3.0,  #tyq
+                 wind_enabled=True, wind_force_max=3,  #tyq
              mass_init=100.0, fuel_mass=90.0, fuel_consumption_rate=0.02):
 
         self.task = task
@@ -256,8 +256,19 @@ class Rocket(object):
         ax = (fx + wind_force - rho * vx) / mass
         ay = (fy - self.g - rho * vy) / mass
 
+        # tyq
+        mass = max(self.mass_init - self.fuel_mass, 10.0)
+        I = (1/12) * mass * (self.H ** 2)  # 更新转动惯量
 
-        atheta = ft*self.H/2 / self.I
+        tau_engine = ft * self.H/2 # 计算推力产生的角加速度
+        # 引入风力随机扰动点位
+        self.h_wind = np.random.uniform(-self.H/2, self.H/2)
+        tau_wind = wind_force * self.h_wind
+        atheta = (tau_engine + tau_wind) / I
+
+        # atheta = ft * self.H/2 / I  # 重新计算角加速度(风吹到质心版本)
+
+        # atheta = ft*self.H/2 / self.I
 
         # update agent
         if self.already_landing:
@@ -288,7 +299,7 @@ class Rocket(object):
         self.already_crash = self.check_crash(self.state)
         reward = self.calculate_reward(self.state)
 
-        # 如果燃料为0认为坠毁    
+        # 如果燃料为0认为坠毁    tyq
         if self.fuel_mass <= 0 and not self.already_landing:
             self.already_crash = True    
 
@@ -562,6 +573,8 @@ class Rocket(object):
         else:
             text = "wind force: OFF"
         put_text(canvas, text, pt)
+        pt = (10, 180)
+        put_text(canvas, "wind_h = %.1f m" % self.h_wind, pt)  # 风吹的位置高度（相对质心）
 
 
     def draw_trajectory(self, canvas, color=(255, 0, 0)):

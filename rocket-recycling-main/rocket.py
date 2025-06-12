@@ -77,6 +77,7 @@ class Rocket(object):
         self.wind_enabled = wind_enabled
         self.wind_force_max = wind_force_max  # 单位 N，最大横向风力
         self.mass_init = mass_init  # 火箭总质量
+        self.fuel_mass_init = fuel_mass  # 记录初始燃料
         self.fuel_mass = fuel_mass  # 可燃烧燃料
         self.fuel_consumption_rate = fuel_consumption_rate  # 每次推力所耗 kg
 
@@ -91,6 +92,7 @@ class Rocket(object):
         self.state_buffer = []
         self.step_id = 0
         self.already_landing = False
+        self.fuel_mass = self.fuel_mass_init  # 每轮训练重置燃料
         cv2.destroyAllWindows()
         return self.flatten(self.state)
 

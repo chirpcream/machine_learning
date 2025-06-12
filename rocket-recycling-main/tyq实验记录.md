@@ -207,6 +207,24 @@ put_text(canvas, "wind @ h = %.1f m" % h_wind, pt)
 
 ##### 解决问题：每轮开始时火箭“油量是上轮剩下的”
 
+```python
+def __init__(...):
+    ...
+    self.fuel_mass_init = fuel_mass  # <--- 记录初始燃料
+    self.fuel_mass = fuel_mass
+    ...
+```
+
+reset()添加
+
+```python
+self.fuel_mass = self.fuel_mass_init 
+```
+
+这样就不会燃料突然消失然后非常吓人了
+
+![image-20250613054034752](tyq实验记录.assets/image-20250613054034752.png)
+
 ## policy.py
 
 原来的policy代码保存在副本里了

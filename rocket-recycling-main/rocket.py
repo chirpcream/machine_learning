@@ -30,7 +30,7 @@ class Rocket(object):
     def __init__(self, max_steps, task='hover', rocket_type='falcon',
                  viewport_h=768, path_to_bg_img=None,
                  wind_enabled=True, wind_force_max=3,  #tyq
-             mass_init=100.0, fuel_mass=90.0, fuel_consumption_rate=0.02):
+             mass_init=2, fuel_mass=1.8, fuel_consumption_rate=0.001):
 
         self.task = task
         self.rocket_type = rocket_type
@@ -197,38 +197,73 @@ class Rocket(object):
         dist_x = abs(state['x'] - self.target_x)
         dist_y = abs(state['y'] - self.target_y)
         dist_norm = dist_x / x_range + dist_y / y_range
+        distance = (dist_x**2 + dist_y**2) ** 0.5   # tyq
+        theta = abs(state['theta']) 
+        v = (state['vx'] ** 2 + state['vy'] ** 2) ** 0.5
 
-        dist_reward = 0.1*(1.0 - dist_norm)
+        dist_reward = 0.0
+        pose_reward = 0.0
+        fuel_bonus = 0.0
+        precision_bonus = 0.0
+        landing_bonus = 0.0
+        crash_penalty = 0.0
 
+        # dist_reward = 0.1*(1.0 - dist_norm)
+        # 距离奖励（指数型靠近目标）
+        dist_reward = np.exp(-distance / 30.0) * 0.5
+        # 精确悬停小范围奖励
+        if distance < 10.0:
+            dist_reward += 0.2
+        elif distance < 20.0:
+            dist_reward += 0.1
+
+        # 悬停角度奖励
         if abs(state['theta']) <= np.pi / 6.0:
             pose_reward = 0.1
         else:
             pose_reward = abs(state['theta']) / (0.5*np.pi)
             pose_reward = 0.1 * (1.0 - pose_reward)
 
-        reward = dist_reward + pose_reward
+        # 燃料节省奖励
+        fuel_bonus = 0.03 * (self.fuel_mass / 30.0)  
 
-        if self.task == 'hover' and (dist_x**2 + dist_y**2)**0.5 <= 2*self.target_r:  # hit target
-            reward = 0.25
-        if self.task == 'hover' and (dist_x**2 + dist_y**2)**0.5 <= 1*self.target_r:  # hit target
-            reward = 0.5
-        if self.task == 'hover' and abs(state['theta']) > 90 / 180 * np.pi:
-            reward = 0
-        
-        # 保存各个reward分量
-        landing_bonus = 0.0
-        crash_penalty = 0.0
-        fuel_bonus = 0.0
 
-        v = (state['vx'] ** 2 + state['vy'] ** 2) ** 0.5
-        if self.task == 'landing' and self.already_crash:
-            reward = (reward + 5*np.exp(-1*v/10.)) * (self.max_steps - self.step_id)
-            reward = crash_penalty
-        if self.task == 'landing' and self.already_landing:
-            reward = (1.0 + 5*np.exp(-1*v/10.))*(self.max_steps - self.step_id)
-            reward = landing_bonus
-            fuel_bonus = 0.1 * (self.fuel_mass / 30.0)
-            reward += fuel_bonus
+        # 精确悬停奖励（持续 + 触发）
+        if not hasattr(self, 'precision_hover_counter'):
+            self.precision_hover_counter = 0
+            self.precision_hover_threshold = 10
+        if distance < 5.0 and theta < 10 / 180 * np.pi:
+            self.precision_hover_counter += 1
+        else:
+            self.precision_hover_counter = 0
+
+        if self.precision_hover_counter >= self.precision_hover_threshold:
+            if self.task == 'hover':
+                precision_bonus = 10.0  
+            elif self.task == 'landing':
+                precision_bonus = 2.0   
+            self.precision_hover_counter = 0
+
+
+        if self.task == 'landing':
+            if self.already_crash:
+                crash_penalty = (dist_reward + pose_reward + 5 * np.exp(-v / 10.0)) * (self.max_steps - self.step_id)
+            elif self.already_landing:
+                landing_bonus = (1.0 + 5 * np.exp(-v / 10.0)) * (self.max_steps - self.step_id)
+
+        if self.task == 'landing':
+            if self.already_crash:
+                reward = crash_penalty
+            elif self.already_landing:
+                reward = landing_bonus + fuel_bonus + precision_bonus
+            else:
+                reward = dist_reward + pose_reward + fuel_bonus + precision_bonus
+        else:
+            # hover 模式
+            if theta > 90 / 180 * np.pi:
+                reward = 0.0  # 姿态过大直接判定失败
+            else:
+                reward = dist_reward + pose_reward + fuel_bonus + precision_bonus
 
         self._last_reward_parts = {
         'dist_reward': float(dist_reward),

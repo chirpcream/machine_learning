@@ -28,10 +28,14 @@ class Rocket(object):
     """
 
     def __init__(self, max_steps, task='hover', rocket_type='falcon',
-                 viewport_h=768, path_to_bg_img=None):
+                 viewport_h=768, path_to_bg_img=None,
+                 wind_enabled=True, wind_force_max=3,
+                 mass_init=100.0, fuel_mass=90.0,
+                 fuel_consumption_rate=0.02, version='_raw'):  #TanYingqi:增加风力、燃料消耗影响
 
         self.task = task
         self.rocket_type = rocket_type
+        self.version = version  #SunYunru:版本控制
 
         self.g = 9.8
         self.H = 50  # rocket height (meters)
@@ -62,7 +66,10 @@ class Rocket(object):
         self.state = self.create_random_state()
         self.action_table = self.create_action_table()
 
-        self.state_dims = 8
+        if version == '_raw':
+            self.state_dims = 8
+        elif version == '_wind&fuel':
+            self.state_dims = 10  #TanYingqi:增加风力、燃料消耗影响
         self.action_dims = len(self.action_table)
 
         if path_to_bg_img is None:
@@ -71,11 +78,12 @@ class Rocket(object):
 
         self.state_buffer = []
 
-        self.wind_enabled = True
-        self.wind_force_max = 3.0  #TanYingqi:单位 N，最大横向风力
-        self.mass_init = 100.0  #TanYingqi:火箭总质量
-        self.fuel_mass = 90.0  #TanYingqi:可燃烧燃料
-        self.fuel_consumption_rate = 0.02  #TanYingqi:每次推力所耗 kg
+        self.wind_enabled = wind_enabled
+        self.wind_force_max = wind_force_max  #TanYingqi:单位 N，最大横向风力
+        self.mass_init = mass_init  #TanYingqi:火箭总质量
+        self.fuel_mass_init = fuel_mass  #TanYingqi:初始可燃烧燃料
+        self.fuel_mass = fuel_mass  #TanYingqi:可燃烧燃料
+        self.fuel_consumption_rate = fuel_consumption_rate  #TanYingqi:每次推力所耗 kg
 
 
     def reset(self, state_dict=None):
@@ -88,6 +96,7 @@ class Rocket(object):
         self.state_buffer = []
         self.step_id = 0
         self.already_landing = False
+        self.fuel_mass = self.fuel_mass_init  #TanYingqi:每轮训练重置燃料质量
         cv2.destroyAllWindows()
         return self.flatten(self.state)
 
@@ -210,15 +219,33 @@ class Rocket(object):
         if self.task == 'hover' and abs(state['theta']) > 90 / 180 * np.pi:
             reward = 0
 
+        #TanYingqi:保存各个reward分量
+        landing_bonus = 0.0
+        crash_penalty = 0.0
+        fuel_bonus = 0.0
+
         v = (state['vx'] ** 2 + state['vy'] ** 2) ** 0.5
         if self.task == 'landing' and self.already_crash:
             reward = (reward + 5*np.exp(-1*v/10.)) * (self.max_steps - self.step_id)
+            reward = crash_penalty
         if self.task == 'landing' and self.already_landing:
             reward = (1.0 + 5*np.exp(-1*v/10.))*(self.max_steps - self.step_id)
+            reward = landing_bonus
+            fuel_bonus = 0.1 * (self.fuel_mass / 30.0)
+            reward += fuel_bonus
 
-        #TanYingqi:燃料消耗收益增加值
-        if self.task == 'landing' and self.already_landing:
-            reward += 0.1 * (self.fuel_mass / 30.0)
+        self._last_reward_parts = {
+        'dist_reward': float(dist_reward),
+        'pose_reward': float(pose_reward),
+        'fuel_bonus': float(fuel_bonus),
+        'landing_bonus': float(landing_bonus),
+        'crash_penalty': float(crash_penalty),
+        'total_reward': float(reward),
+        'fuel_left': float(self.fuel_mass),
+        'step_id': self.step_id,
+        'landed': self.already_landing,
+        'crashed': self.already_crash
+        }            
 
         return reward
 
@@ -228,30 +255,52 @@ class Rocket(object):
         theta, vtheta = self.state['theta'], self.state['vtheta']
         phi = self.state['phi']
 
-        f, vphi = self.action_table[action]
+        #TanYingqi:推力惯性
+        # f, vphi = self.action_table[action]
+        f_target, vphi = self.action_table[action]
+
+        #TanYingqi:推力惯性参数
+        self._throttle_beta = 0.9 if not hasattr(self, '_throttle_beta') else self._throttle_beta
+        self.f = self.f if hasattr(self, 'f') else f_target  #TanYingqi:初始化上次推力
+
+        #TanYingqi:平滑更新推力（模拟推力惯性）
+        self.f = self._throttle_beta * self.f + (1 - self._throttle_beta) * f_target
+        f = self.f
 
         #TanYingqi:推力消耗燃料
         if f > 0:
-            self.fuel_mass -= self.fuel_consumption_rate * (f / self.g)  #TanYingqi:简单按推力归一化计算
-            self.fuel_mass = max(self.fuel_mass, 0)  #TanYingqi:避免为负
+            if self.version == '_wind&fuel':
+                self.fuel_mass -= self.fuel_consumption_rate * (f / self.g)  #TanYingqi:简单按推力归一化计算
+                self.fuel_mass = max(self.fuel_mass, 0)  #TanYingqi:避免为负
+            elif self.version == '_raw':
+                self.fuel_mass = self.fuel_mass_init
 
         ft, fr = -f*np.sin(phi), f*np.cos(phi)
         fx = ft*np.cos(theta) - fr*np.sin(theta)
         fy = ft*np.sin(theta) + fr*np.cos(theta)
 
         rho = 1 / (125/(self.g/2.0))**0.5  # suppose after 125 m free fall, then air resistance = mg
-        #ax, ay = fx-rho*vx, fy-self.g-rho*vy tyq
+        #TanYingqi:更新质量和风力影响
         mass = self.mass_init - self.fuel_mass
         mass = max(mass, 10.0)  #TanYingqi:防止质量为负
         wind_force = 0.0
         if self.wind_enabled:
             wind_force = np.random.uniform(-self.wind_force_max, self.wind_force_max)
 
+        self._last_wind_force = wind_force
+
         ax = (fx + wind_force - rho * vx) / mass
         ay = (fy - self.g - rho * vy) / mass
 
+        #TanYingqi:更新转动惯量
+        mass = max(self.mass_init - self.fuel_mass, 10.0)
+        I = (1/12) * mass * (self.H ** 2)  #TanYingqi:更新转动惯量
 
-        atheta = ft*self.H/2 / self.I
+        tau_engine = ft * self.H/2 #TanYingqi:计算推力产生的角加速度
+        #TanYingqi:引入风力随机扰动点位
+        self.h_wind = np.random.uniform(-self.H/2, self.H/2)
+        tau_wind = wind_force * self.h_wind
+        atheta = (tau_engine + tau_wind) / I
 
         # update agent
         if self.already_landing:
@@ -282,6 +331,10 @@ class Rocket(object):
         self.already_crash = self.check_crash(self.state)
         reward = self.calculate_reward(self.state)
 
+        #TanYingqi:如果燃料为0认为坠毁
+        if self.fuel_mass <= 0 and not self.already_landing:
+            self.already_crash = True  
+
         if self.already_crash or self.already_landing:
             done = True
         else:
@@ -293,7 +346,13 @@ class Rocket(object):
         x = [state['x'], state['y'], state['vx'], state['vy'],
              state['theta'], state['vtheta'], state['t'],
              state['phi']]
-        return np.array(x, dtype=np.float32)/100.
+        #TanYingqi:加入燃料质量与步数归一化
+        x = np.array(x, dtype=np.float32)/100.
+        fuel_ratio = np.array([self.fuel_mass / self.mass_init], dtype=np.float32)
+        step_ratio = np.array([state['t'] / self.max_steps], dtype=np.float32)
+
+        return np.concatenate([x, fuel_ratio, step_ratio])
+        # return np.array(x, dtype=np.float32)/100.
 
     def render(self, window_name='env', wait_time=1,
                with_trajectory=True, with_camera_tracking=True,
@@ -535,6 +594,24 @@ class Rocket(object):
         text = "a: %.2f degree, va: %.2f degree/s" % \
                (self.state['theta'] * 180 / np.pi, self.state['vtheta'] * 180 / np.pi)
         put_text(canvas, text, pt)
+
+        #TanYingqi:绘制风力和燃料剩余量
+        pt = (10, 120)
+        text = "fuel left: %.2f kg" % self.fuel_mass
+        put_text(canvas, text, pt)
+
+        pt = (10, 140)
+        if self.wind_enabled:
+            text = "wind force: %.2f N" % self._last_wind_force  #TanYingqi:自定义属性
+        else:
+            text = "wind force: OFF"
+        put_text(canvas, text, pt)
+        pt = (10, 160)
+        put_text(canvas, "wind_h = %.1f m" % self.h_wind, pt)  #TanYingqi:风吹的位置高度（相对质心）
+
+        #TanYingqi:绘制平滑推力
+        pt = (10, 180)
+        put_text(canvas, "smoothed thrust: %.2f N" % self.f, pt)
 
 
     def draw_trajectory(self, canvas, color=(255, 0, 0)):

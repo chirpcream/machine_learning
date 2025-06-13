@@ -7,29 +7,71 @@ import utils
 import os
 import glob
 import cv2
+import csv #TanYingqi:导入csv模块以便保存数据
 
 # Decide which device we want to run on
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 if __name__ == '__main__':
-
+    #SunYunru:训练前必须注意的内容
     task = 'hover'  # 'hover' or 'landing'
     rocket_type = 'falcon'  #SunYunru:考虑变量rocket_type:可以选'falcon'或'starship'
-    version = '_raw'  #SunYunru:增设变量version，方便对比不同修改下代码运行结果
+    version = '_raw'  #SunYunru:增设变量version，方便对比不同修改下代码运行结果:可以选'_raw'或'_wind&fuel'
+    entropy_set =True  #TanYingqi:增设变量entropy_set，促进策略多样性探索  #SunYunru:整合完善
+    layer_norm = True  #TanYingqi:增设变量layer_norm，确定是否使用层归一化  #SunYunru:整合完善
     record_video = True  #SunYunru:增设变量record_video，确定是否保存视频
-
-    max_m_episode = 20000  #SunYunru:改到20000轮训练
+    max_m_episode = 30000  #SunYunru:改到30000轮训练
     max_steps = 800
 
-    env = Rocket(task=task, max_steps=max_steps, rocket_type=rocket_type)
+    #SunYunru:常规参数初始化
     ckpt_folder = os.path.join('./', task + '_' + rocket_type + version + '_ckpt')
+    wind_enabled = False
+    wind_force_max = 2.5
+    fuel_mass = 100.0
+    mass_init = 120.0
+    fuel_consumption_rate = 0.02
     if not os.path.exists(ckpt_folder):
         os.mkdir(ckpt_folder)
-
     last_episode_id = 0
     REWARDS = []
 
-    net = ActorCritic(input_dim=env.state_dims, output_dim=env.action_dims).to(device)
+    #SunYunru:依据不同version进行参数修改
+    if version == '_wind&fuel':
+        wind_enabled = True
+        wind_force_max = 2.5
+        fuel_mass = 100.0
+        mass_init = 120.0
+        fuel_consumption_rate = 0.02
+
+    #TanYingqi:记录奖励情况，并保存为csv文件  #SunYunru:加入版本控制
+    VERSION_HEADERS = {
+        '_raw': ['episode', 'total_reward', 'dist_reward', 'pose_reward', 
+                'landing_bonus', 'crash_penalty', 'step_id', 'landed', 'crashed'],
+        '_wind&fuel': ['episode', 'total_reward', 'dist_reward', 'pose_reward',
+                    'fuel_bonus', 'landing_bonus', 'crash_penalty', 
+                    'fuel_left', 'step_id', 'landed', 'crashed']
+    }
+    log_path = os.path.join(ckpt_folder, 'train_log.csv')
+    if not os.path.exists(log_path):
+        #SunYunru:设置表头
+        headers = VERSION_HEADERS.get(version, VERSION_HEADERS['_raw'])
+        with open(log_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(headers)
+
+    #SunYunru:环境初始化  #TanYingqi:增加风力、燃料消耗影响
+    env = Rocket(task=task, max_steps=max_steps, rocket_type=rocket_type,
+             wind_enabled=wind_enabled,
+             wind_force_max=wind_force_max,
+             fuel_mass=fuel_mass,
+             mass_init=mass_init,
+             fuel_consumption_rate=fuel_consumption_rate,
+             version=version)  #SunYunru:版本控制
+
+    #SunYunru:策略网络初始化
+    net = ActorCritic(input_dim=env.state_dims, output_dim=env.action_dims, layer_norm=layer_norm, entropy_set=entropy_set).to(device)
+
+    #SunYunru:加载上次训练的模型
     if len(glob.glob(os.path.join(ckpt_folder, '*.pt'))) > 0:
         # load the last ckpt
         checkpoint = torch.load(glob.glob(os.path.join(ckpt_folder, '*.pt'))[-1], weights_only=False)  #SunYunru:兼容不同版本的pytorch
@@ -37,6 +79,7 @@ if __name__ == '__main__':
         last_episode_id = checkpoint['episode_id']
         REWARDS = checkpoint['REWARDS']
 
+    #SunYunru:正式训练
     for episode_id in range(last_episode_id, max_m_episode):
         if episode_id % 1000 == 1 and record_video:  #SunYunru:设置视频保存功能，每1000轮训练保存一次视频
             video_path = os.path.join(ckpt_folder, f'train_ep_{episode_id}.mp4')
@@ -45,6 +88,7 @@ if __name__ == '__main__':
         # training loop
         state = env.reset()
         rewards, log_probs, values, masks = [], [], [], []
+        #SunYunru:每次训练的每一步
         for step_id in range(max_steps):
             action, log_prob, value = net.get_action(state)
             state, reward, done, _ = env.step(action)
@@ -68,6 +112,13 @@ if __name__ == '__main__':
         REWARDS.append(np.sum(rewards))
         print('episode id: %d, episode reward: %.3f'
               % (episode_id, np.sum(rewards)))
+        
+        #TanYingqi:用csv记录奖励  #SunYunru:加入版本控制、稍作优化
+        reward_parts = getattr(env, '_last_reward_parts', {})
+        BOOL_HEADERS = {'landed', 'crashed'}
+        row = [episode_id] + [reward_parts.get(field, False if field in BOOL_HEADERS else 0) for field in headers[1:]]
+        with open(log_path, 'a', newline='') as f:
+            csv.writer(f).writerow(row)
 
         if episode_id % 100 == 1:
             plt.figure()

@@ -56,25 +56,36 @@ class MLP(nn.Module):
     Multilayer perception with an embedded positional mapping
     """
 
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim, layer_norm=False):
         super().__init__()
-
+        #TanYingqi:添加层归一化  #SunYunru:整合完善
+        self.layer_norm = layer_norm
         self.mapping = PositionalMapping(input_dim=input_dim, L=7)
-
         h_dim = 128
         self.linear1 = nn.Linear(in_features=self.mapping.output_dim, out_features=h_dim, bias=True)
         self.linear2 = nn.Linear(in_features=h_dim, out_features=h_dim, bias=True)
         self.linear3 = nn.Linear(in_features=h_dim, out_features=h_dim, bias=True)
         self.linear4 = nn.Linear(in_features=h_dim, out_features=output_dim, bias=True)
+        if self.layer_norm:
+            self.norm1 = nn.LayerNorm(h_dim)
+            self.norm2 = nn.LayerNorm(h_dim)
+            self.norm3 = nn.LayerNorm(h_dim)
         self.relu = nn.LeakyReLU(0.2)
 
     def forward(self, x):
         # shape x: 1 x m_token x m_state
+        #SunYunru:是否使用层归一化
         x = x.view([1, -1])
         x = self.mapping(x)
-        x = self.relu(self.linear1(x))
-        x = self.relu(self.linear2(x))
-        x = self.relu(self.linear3(x))
+        if self.layer_norm:
+            x = self.relu(self.norm1(self.linear1(x)))
+            x = self.relu(self.norm2(self.linear2(x)))
+            x = self.relu(self.norm3(self.linear3(x)))
+            x = self.linear4(x)
+        else:
+            x = self.relu(self.linear1(x))
+            x = self.relu(self.linear2(x))
+            x = self.relu(self.linear3(x))
         x = self.linear4(x)
         return x
 
@@ -84,12 +95,14 @@ class ActorCritic(nn.Module):
     RL policy and update rules
     """
 
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim, layer_norm=False, entropy_set=False):
         super().__init__()
 
         self.output_dim = output_dim
-        self.actor = MLP(input_dim=input_dim, output_dim=output_dim)
-        self.critic = MLP(input_dim=input_dim, output_dim=1)
+        self.layer_norm = layer_norm
+        self.entropy_set = entropy_set
+        self.actor = MLP(input_dim=input_dim, output_dim=output_dim, layer_norm=layer_norm)
+        self.critic = MLP(input_dim=input_dim, output_dim=1, layer_norm=layer_norm)
         self.softmax = nn.Softmax(dim=-1)
 
         self.optimizer = optim.RMSprop(self.parameters(), lr=5e-5)
@@ -122,7 +135,7 @@ class ActorCritic(nn.Module):
         return action_id, log_prob, value
 
     @staticmethod
-    def update_ac(network, rewards, log_probs, values, masks, Qval, gamma=0.99):
+    def update_ac(network, rewards, log_probs, values, masks, Qval, gamma=0.99, entropy_set=False):
 
         # compute Q values
         Qvals = calculate_returns(Qval.detach(), rewards, masks, gamma=gamma)
@@ -132,7 +145,11 @@ class ActorCritic(nn.Module):
         values = torch.stack(values)
 
         advantage = Qvals - values
-        actor_loss = (-log_probs * advantage.detach()).mean()
+        if entropy_set:
+            entropy = -(log_probs * torch.exp(log_probs)).sum()
+            actor_loss = (-log_probs * advantage.detach()).mean() - 0.001 * entropy
+        else:
+            actor_loss = (-log_probs * advantage.detach()).mean()
         critic_loss = 0.5 * advantage.pow(2).mean()
         ac_loss = actor_loss + critic_loss
 

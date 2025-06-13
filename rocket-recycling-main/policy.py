@@ -81,7 +81,6 @@ class MLP(nn.Module):
             x = self.relu(self.norm1(self.linear1(x)))
             x = self.relu(self.norm2(self.linear2(x)))
             x = self.relu(self.norm3(self.linear3(x)))
-            x = self.linear4(x)
         else:
             x = self.relu(self.linear1(x))
             x = self.relu(self.linear2(x))

@@ -15,7 +15,7 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 if __name__ == '__main__':
     #SunYunru:训练前必须注意的内容
     task = 'hover'  # 'hover' or 'landing'
-    rocket_type = 'falcon'  #SunYunru:考虑变量rocket_type:可以选'falcon'或'starship'
+    rocket_type = 'starship'  #SunYunru:考虑变量rocket_type:可以选'falcon'或'starship'
     version = '_wind&fuel'  #SunYunru:增设变量version，方便对比不同修改下代码运行结果:可以选'_raw'或'_wind&fuel'
     entropy_set =True  #TanYingqi:增设变量entropy_set，促进策略多样性探索  #SunYunru:整合完善
     layer_norm = True  #TanYingqi:增设变量layer_norm，确定是否使用层归一化  #SunYunru:整合完善

@@ -79,11 +79,18 @@ class Rocket(object):
         self.state_buffer = []
 
         self.wind_enabled = wind_enabled
-        self.wind_force_max = wind_force_max  #TanYingqi:单位 N，最大横向风力
+        if version == '_raw':
+            self.wind_force_max = 0.0  #SunYunru:不考虑风力影响
+        else:
+            self.wind_force_max = wind_force_max  #TanYingqi:单位 N，最大横向风力
         self.mass_init = mass_init  #TanYingqi:火箭总质量
         self.fuel_mass_init = fuel_mass  #TanYingqi:初始可燃烧燃料
         self.fuel_mass = fuel_mass  #TanYingqi:可燃烧燃料
+        self.structure_mass = self.mass_init - self.fuel_mass_init  #SunYunru:定义结构质量，优化代码表达
         self.fuel_consumption_rate = fuel_consumption_rate  #TanYingqi:每次推力所耗 kg
+        self._last_wind_force = 0.0  #SunYunru:记录上一次风力
+
+
 
 
     def reset(self, state_dict=None):
@@ -201,38 +208,91 @@ class Rocket(object):
         dist_x = abs(state['x'] - self.target_x)
         dist_y = abs(state['y'] - self.target_y)
         dist_norm = dist_x / x_range + dist_y / y_range
+        distance = (dist_x**2 + dist_y**2) ** 0.5  #TanYingqi:计算距离
+        theta = abs(state['theta']) 
+        v = (state['vx'] ** 2 + state['vy'] ** 2) ** 0.5
 
-        dist_reward = 0.1*(1.0 - dist_norm)
+        # dist_reward = 0.1*(1.0 - dist_norm)
+        dist_reward = 0.0
+        pose_reward = 0.0
+        fuel_bonus = 0.0
+        precision_bonus = 0.0
+        landing_bonus = 0.0
+        crash_penalty = 0.0
 
+        #SunYunru:奖励计算结构说明
+        '''
+        这里对奖励计算结构进行了较大的改动，解释如下：
+        landing工况未坠毁、着陆，hover工况倾角不过大时，总奖励= 距离奖励（常规指数型距离奖励+附加距离奖励） + 悬停角度奖励 + 燃料节省奖励 + 精确悬停奖励
+        landing工况坠毁，则总奖励为坠毁惩罚，目前设为了0
+        landing工况着陆成功，则总奖励为按照特定公式计算的着陆奖励，加上燃料节省奖励和精确悬停奖励
+        hover工况倾角过大，则总奖励为0
+        其中：
+        - 距离奖励：使用指数函数计算距离奖励，距离越近奖励越高，并且在距离小于10或20时增加附加奖励
+        - 悬停角度奖励：如果姿态角度小于30度，则奖励0.1，否则根据角度大小计算奖励
+        - 燃料节省奖励：根据剩余燃料质量计算奖励
+        - 精确悬停奖励：如果长期保持在目标点附近且姿态角度小于阈值，则额外一次性增加奖励
+        - 着陆奖励：如果成功着陆，则奖励为1.0 + 5 * exp(-v / 10.0) * (剩余步数)，其中v为速度
+        - 坠毁惩罚：如果已经坠毁，则奖励为坠毁惩罚
+        注意：如果燃料质量为0，则认为坠毁
+        以上奖励计算方式旨在鼓励火箭在悬停和着陆任务中尽量减少距离目标点的偏差，保持正确的姿态，并节省燃料，同时避免坠毁。
+        其中，距离奖励和姿态奖励是常规的指数型奖励，附加距离奖励和精确悬停奖励则是为了鼓励火箭在目标点附近保持稳定悬停。
+        '''
+        #TanYingqi:常规指数型距离奖励
+        dist_reward = np.exp(-distance / 30.0) * 0.5
+
+        #TanYingqi:附加距离奖励
+        if distance < 10.0:
+            dist_reward += 0.2
+        elif distance < 20.0:
+            dist_reward += 0.1
+
+        #TanYingqi:悬停角度奖励
         if abs(state['theta']) <= np.pi / 6.0:
             pose_reward = 0.1
         else:
             pose_reward = abs(state['theta']) / (0.5*np.pi)
             pose_reward = 0.1 * (1.0 - pose_reward)
 
-        reward = dist_reward + pose_reward
+        #TanYingqi:燃料节省奖励
+        fuel_bonus = 0.03 * (self.fuel_mass / 30.0)
 
-        if self.task == 'hover' and (dist_x**2 + dist_y**2)**0.5 <= 2*self.target_r:  # hit target
-            reward = 0.25
-        if self.task == 'hover' and (dist_x**2 + dist_y**2)**0.5 <= 1*self.target_r:  # hit target
-            reward = 0.5
-        if self.task == 'hover' and abs(state['theta']) > 90 / 180 * np.pi:
-            reward = 0
+        #TanYingqi:精确悬停奖励（持续计算点数，达到阈值一次性触发）
+        if not hasattr(self, 'precision_hover_counter'):
+            self.precision_hover_counter = 0
+            self.precision_hover_threshold = 10
+        if distance < 5.0 and theta < 10 / 180 * np.pi:
+            self.precision_hover_counter += 1
+        else:
+            self.precision_hover_counter = 0
 
-        #TanYingqi:保存各个reward分量
-        landing_bonus = 0.0
-        crash_penalty = 0.0
-        fuel_bonus = 0.0
+        if self.precision_hover_counter >= self.precision_hover_threshold:
+            if self.task == 'hover':
+                precision_bonus = 10.0  
+            elif self.task == 'landing':
+                precision_bonus = 2.0   
+            self.precision_hover_counter = 0
 
-        v = (state['vx'] ** 2 + state['vy'] ** 2) ** 0.5
-        if self.task == 'landing' and self.already_crash:
-            reward = (reward + 5*np.exp(-1*v/10.)) * (self.max_steps - self.step_id)
-            reward = crash_penalty
-        if self.task == 'landing' and self.already_landing:
-            reward = (1.0 + 5*np.exp(-1*v/10.))*(self.max_steps - self.step_id)
-            reward = landing_bonus
-            fuel_bonus = 0.1 * (self.fuel_mass / 30.0)
-            reward += fuel_bonus
+        #SunYunru:坠毁和着陆奖励
+        if self.task == 'landing':
+            if self.already_crash:
+                crash_penalty = (dist_reward + pose_reward + 5 * np.exp(-v / 10.0)) * (self.max_steps - self.step_id)
+            elif self.already_landing:
+                landing_bonus = (1.0 + 5 * np.exp(-v / 10.0)) * (self.max_steps - self.step_id)
+
+        #SunYunru:奖励计算
+        if self.task == 'landing':
+            if self.already_crash:
+                reward = crash_penalty
+            elif self.already_landing:
+                reward = landing_bonus + fuel_bonus + precision_bonus
+            else:
+                reward = dist_reward + pose_reward + fuel_bonus + precision_bonus
+        elif self.task == 'hover':
+            if theta > 90 / 180 * np.pi:
+                reward = 0.0  #TanYingqi:姿态过大直接判定失败
+            else:
+                reward = dist_reward + pose_reward + fuel_bonus + precision_bonus
 
         self._last_reward_parts = {
         'dist_reward': float(dist_reward),
@@ -250,7 +310,13 @@ class Rocket(object):
         return reward
 
     def step(self, action):
-
+        #SunYunru:有关力计算的说明
+        '''
+        这里火箭主要受到推力、风力的影响，不受重力等的影响，力的算法等也比较脱离实际，考虑到这不是研究的重点，故先用这个方法计算。
+        这里的推力和风力都做了一定的平滑处理。
+        由于不受重力，为了能够让效果更加明显，火箭的质量要设置的比实际低一些。
+        由于对于风力的建模并不符合实际，火箭姿态的变化和实际所受的风力没有关系，因此我倾向于把它当做一个不可控的随机扰动，并尽可能取小值。
+        '''
         x, y, vx, vy = self.state['x'], self.state['y'], self.state['vx'], self.state['vy']
         theta, vtheta = self.state['theta'], self.state['vtheta']
         phi = self.state['phi']
@@ -260,7 +326,7 @@ class Rocket(object):
         f_target, vphi = self.action_table[action]
 
         #TanYingqi:推力惯性参数
-        self._throttle_beta = 0.9 if not hasattr(self, '_throttle_beta') else self._throttle_beta
+        self._throttle_beta = 0.1 if not hasattr(self, '_throttle_beta') else self._throttle_beta  #SunYunru:降低推力惯性参数
         self.f = self.f if hasattr(self, 'f') else f_target  #TanYingqi:初始化上次推力
 
         #TanYingqi:平滑更新推力（模拟推力惯性）
@@ -280,25 +346,29 @@ class Rocket(object):
         fy = ft*np.sin(theta) + fr*np.cos(theta)
 
         rho = 1 / (125/(self.g/2.0))**0.5  # suppose after 125 m free fall, then air resistance = mg
-        #TanYingqi:更新质量和风力影响
-        mass = self.mass_init - self.fuel_mass
-        mass = max(mass, 10.0)  #TanYingqi:防止质量为负
+        
+        #TanYingqi:更新质量和风力影响 #SunYunru:修改物理逻辑错误
+        if self.version == '_wind&fuel':
+            mass = self.structure_mass + self.fuel_mass #SunYunru:定义结构质量，优化代码表达
+        elif self.version == '_raw':
+            mass = self.mass_init
+
         wind_force = 0.0
         if self.wind_enabled:
-            wind_force = np.random.uniform(-self.wind_force_max, self.wind_force_max)
-
+            target_wind =np.random.uniform(-self.wind_force_max, self.wind_force_max)
+            wind_force = self._last_wind_force * 0.9 + target_wind * 0.1  #SunYunru:平滑更新风力，避免风向突变的脱离实际的情况
         self._last_wind_force = wind_force
 
         ax = (fx + wind_force - rho * vx) / mass
         ay = (fy - self.g - rho * vy) / mass
 
         #TanYingqi:更新转动惯量
-        mass = max(self.mass_init - self.fuel_mass, 10.0)
-        I = (1/12) * mass * (self.H ** 2)  #TanYingqi:更新转动惯量
+        I = (1/12) * mass * (self.H ** 2)  #TanYingqi:更新转动惯量 #SunYunru:这里转动惯量的计算应该进行了简化，认为质量是均匀分布的
 
         tau_engine = ft * self.H/2 #TanYingqi:计算推力产生的角加速度
         #TanYingqi:引入风力随机扰动点位
-        self.h_wind = np.random.uniform(-self.H/2, self.H/2)
+        if not hasattr(self, 'h_wind') or self.step_id % 10 == 0:  #SunYunru:每10步更新一次        
+            self.h_wind = np.random.uniform(-self.H/2, self.H/2)
         tau_wind = wind_force * self.h_wind
         atheta = (tau_engine + tau_wind) / I
 
@@ -348,11 +418,13 @@ class Rocket(object):
              state['phi']]
         #TanYingqi:加入燃料质量与步数归一化
         x = np.array(x, dtype=np.float32)/100.
-        fuel_ratio = np.array([self.fuel_mass / self.mass_init], dtype=np.float32)
-        step_ratio = np.array([state['t'] / self.max_steps], dtype=np.float32)
 
-        return np.concatenate([x, fuel_ratio, step_ratio])
-        # return np.array(x, dtype=np.float32)/100.
+        if self.version == '_raw':  #SunYunru
+            return x
+        elif self.version == '_wind&fuel':
+            fuel_ratio = np.array([self.fuel_mass / self.mass_init], dtype=np.float32)
+            step_ratio = np.array([state['t'] / self.max_steps], dtype=np.float32)
+            return np.concatenate([x, fuel_ratio, step_ratio])
 
     def render(self, window_name='env', wait_time=1,
                with_trajectory=True, with_camera_tracking=True,
@@ -595,23 +667,24 @@ class Rocket(object):
                (self.state['theta'] * 180 / np.pi, self.state['vtheta'] * 180 / np.pi)
         put_text(canvas, text, pt)
 
-        #TanYingqi:绘制风力和燃料剩余量
-        pt = (10, 120)
-        text = "fuel left: %.2f kg" % self.fuel_mass
-        put_text(canvas, text, pt)
+        if self.version == '_wind&fuel':
+            #TanYingqi:绘制风力和燃料剩余量
+            pt = (10, 120)
+            text = "fuel left: %.2f kg" % self.fuel_mass
+            put_text(canvas, text, pt)
 
-        pt = (10, 140)
-        if self.wind_enabled:
-            text = "wind force: %.2f N" % self._last_wind_force  #TanYingqi:自定义属性
-        else:
-            text = "wind force: OFF"
-        put_text(canvas, text, pt)
-        pt = (10, 160)
-        put_text(canvas, "wind_h = %.1f m" % self.h_wind, pt)  #TanYingqi:风吹的位置高度（相对质心）
+            pt = (10, 140)
+            if self.wind_enabled:
+                text = "wind force: %.2f N" % self._last_wind_force  #TanYingqi:自定义属性
+            else:
+                text = "wind force: OFF"
+            put_text(canvas, text, pt)
+            pt = (10, 160)
+            put_text(canvas, "wind_h = %.1f m" % self.h_wind, pt)  #TanYingqi:风吹的位置高度（相对质心）
 
-        #TanYingqi:绘制平滑推力
-        pt = (10, 180)
-        put_text(canvas, "smoothed thrust: %.2f N" % self.f, pt)
+            #TanYingqi:绘制平滑推力
+            pt = (10, 180)
+            put_text(canvas, "smoothed thrust: %.2f N" % self.f, pt)
 
 
     def draw_trajectory(self, canvas, color=(255, 0, 0)):
@@ -680,4 +753,3 @@ class Rocket(object):
 
         vis = cv2.resize(vis, (self.viewport_w, self.viewport_h))
         return vis
-

@@ -357,8 +357,8 @@ class Rocket(object):
             wind_force = self._last_wind_force * 0.9 + target_wind * 0.1  #SunYunru:平滑更新风力，避免风向突变的脱离实际的情况
         self._last_wind_force = wind_force
 
-        ax = (fx + wind_force - rho * vx) / mass
-        ay = (fy - self.g - rho * vy) / mass
+        ax = (fx * (self.structure_mass + self.fuel_mass_init) + wind_force - rho * vx) / mass
+        ay = (fy * (self.structure_mass + self.fuel_mass_init) - self.g * mass - rho * vy) / mass
 
         #TanYingqi:更新转动惯量
         I = (1/12) * mass * (self.H ** 2)  #TanYingqi:更新转动惯量 #SunYunru:这里转动惯量的计算应该进行了简化，认为质量是均匀分布的

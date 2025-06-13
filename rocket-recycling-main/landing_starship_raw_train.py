@@ -26,10 +26,10 @@ if __name__ == '__main__':
     #SunYunru:常规参数初始化
     ckpt_folder = os.path.join('./', task + '_' + rocket_type + version + '_ckpt')
     wind_enabled = False
-    wind_force_max = 0.3
-    fuel_mass = 5.0
-    mass_init = 10.0
-    fuel_consumption_rate = 0.01
+    wind_force_max = 0.2
+    fuel_mass = 3.0
+    mass_init = 5.0
+    fuel_consumption_rate = 0.005
     if not os.path.exists(ckpt_folder):
         os.mkdir(ckpt_folder)
     last_episode_id = 0
@@ -38,10 +38,10 @@ if __name__ == '__main__':
     #SunYunru:依据不同version进行参数修改
     if version == '_wind&fuel':
         wind_enabled = True
-        wind_force_max = 0.3
-        fuel_mass = 5.0
-        mass_init = 10.0
-        fuel_consumption_rate = 0.01
+        wind_force_max = 0.2
+        fuel_mass = 3.0
+        mass_init = 5.0
+        fuel_consumption_rate = 0.005
 
     #TanYingqi:记录奖励情况，并保存为csv文件  #SunYunru:加入版本控制
     #SunYunru:设置表头

@@ -22,18 +22,18 @@ if __name__ == '__main__':
     ckpt_folder = os.path.join('./', task + version + '_' + rocket_type + '_ckpt')
     ckpt_dir = glob.glob(os.path.join(ckpt_folder, '*.pt'))[-1]  # last ckpt
     wind_enabled = False
-    wind_force_max = 0.3
-    fuel_mass = 5.0
-    mass_init = 10.0
-    fuel_consumption_rate = 0.01
+    wind_force_max = 0.2
+    fuel_mass = 3.0
+    mass_init = 5.0
+    fuel_consumption_rate = 0.005
 
     #SunYunru:版本控制
     if version == '_wind&fuel':  #SunYunru:考虑风力和燃料消耗影响时的版本控制
         wind_enabled = True
-        wind_force_max = 0.3
-        fuel_mass = 5.0
-        mass_init = 10.0
-        fuel_consumption_rate = 0.01
+        wind_force_max = 0.2
+        fuel_mass = 3.0
+        mass_init = 5.0
+        fuel_consumption_rate = 0.005
 
 
     #TanYingqi:增加风力、燃料消耗影响

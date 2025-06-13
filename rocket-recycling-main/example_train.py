@@ -26,7 +26,7 @@ if __name__ == '__main__':
     # tyq
     env = Rocket(task=task, max_steps=max_steps, rocket_type=rocket_type,
              wind_enabled=True, wind_force_max=2.0,
-             mass_init=2, fuel_mass=1.8)
+             mass_init=1, fuel_mass=0.9)
 
     ckpt_folder = os.path.join('./', task + '_' + rocket_type + version + '_ckpt_222')
     if not os.path.exists(ckpt_folder):

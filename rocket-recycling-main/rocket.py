@@ -30,7 +30,7 @@ class Rocket(object):
     def __init__(self, max_steps, task='hover', rocket_type='falcon',
                  viewport_h=768, path_to_bg_img=None,
                  wind_enabled=True, wind_force_max=3,  #tyq
-             mass_init=2, fuel_mass=1.8, fuel_consumption_rate=0.001):
+             mass_init=1, fuel_mass=0.9, fuel_consumption_rate=0.0001):
 
         self.task = task
         self.rocket_type = rocket_type

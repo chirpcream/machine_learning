@@ -20,7 +20,7 @@ if __name__ == '__main__':
     entropy_set =True  #TanYingqi:增设变量entropy_set，促进策略多样性探索  #SunYunru:整合完善
     layer_norm = True  #TanYingqi:增设变量layer_norm，确定是否使用层归一化  #SunYunru:整合完善
     record_video = True  #SunYunru:增设变量record_video，确定是否保存视频
-    max_m_episode = 30000  #SunYunru:改到30000轮训练
+    max_m_episode = 30001  #SunYunru:改到30001轮训练
     max_steps = 800
 
     #SunYunru:常规参数初始化
@@ -81,7 +81,7 @@ if __name__ == '__main__':
 
     #SunYunru:正式训练
     for episode_id in range(last_episode_id, max_m_episode):
-        if episode_id % 999 == 1 and record_video:  #SunYunru:设置视频保存功能，每1000轮训练保存一次视频
+        if episode_id % 1000 == 1 and record_video:  #SunYunru:设置视频保存功能，每1000轮训练保存一次视频
             video_path = os.path.join(ckpt_folder, f'train_ep_{episode_id}.mp4')
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')
             video_writer = cv2.VideoWriter(video_path, fourcc, 2/env.dt, (env.viewport_w, env.viewport_h))
@@ -96,17 +96,17 @@ if __name__ == '__main__':
             log_probs.append(log_prob)
             values.append(value)
             masks.append(1-done)
-            if episode_id % 999 == 1 and record_video:
+            if episode_id % 1000 == 1 and record_video:
                 frame_0, frame_1 = env.render()
                 video_writer.write(cv2.cvtColor(frame_0, cv2.COLOR_RGB2BGR))
                 video_writer.write(cv2.cvtColor(frame_1, cv2.COLOR_RGB2BGR))
-            elif episode_id % 449 == 1:
+            elif episode_id % 500 == 1:
                 env.render()
             if done or step_id == max_steps-1:
                 _, _, Qval = net.get_action(state)
                 net.update_ac(net, rewards, log_probs, values, masks, Qval, gamma=0.999)
                 break
-        if episode_id % 999 == 1 and record_video and 'video_writer' in locals():
+        if episode_id % 1000 == 1 and record_video and 'video_writer' in locals():
             video_writer.release()
 
         REWARDS.append(np.sum(rewards))
@@ -133,6 +133,3 @@ if __name__ == '__main__':
                         'REWARDS': REWARDS,
                         'model_G_state_dict': net.state_dict()},
                        os.path.join(ckpt_folder, 'ckpt_' + str(episode_id).zfill(8) + '.pt'))
-
-
-

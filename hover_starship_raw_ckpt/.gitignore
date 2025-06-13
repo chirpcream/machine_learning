@@ -114,13 +114,13 @@ dmypy.json
 .pyre/
 
 .idea
-*.pt
+# *.pt
 *.png
-*.mp4
+# *.mp4
 demo*
 TTT*
 rewards.jpg
 hover_ckpt
 landing_ckpt
-*.jpg
+# *.jpg
 # .gitignore

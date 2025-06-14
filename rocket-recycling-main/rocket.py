@@ -108,18 +108,37 @@ class Rocket(object):
         return self.flatten(self.state)
 
     def create_action_table(self):
-        f0 = 0.1 * self.g  # thrust
+        # f0 = 0.1 * self.g  # thrust
+        # f1 = 1.0 * self.g
+        # f2 = 2.2 * self.g
+        # vphi0 = 0  # Nozzle angular velocity
+        # vphi1 = 30 / 180 * np.pi
+        # vphi2 = -30 / 180 * np.pi
+
+        # action_table = [[f0, vphi0], [f0, vphi1], [f0, vphi2],
+        #                 [f1, vphi0], [f1, vphi1], [f1, vphi2],
+        #                 [f2, vphi0], [f2, vphi1], [f2, vphi2]
+        #                 ]
+        # return action_table
+
+        #SunYunru:修改动作表
+        f0 = 0.2 * self.g  # thrust
         f1 = 1.0 * self.g
-        f2 = 2.2 * self.g
+        f2 = 2.0 * self.g
+        f3 = 4.0 * self.g  #SunYunru:增加更大推力
         vphi0 = 0  # Nozzle angular velocity
         vphi1 = 30 / 180 * np.pi
         vphi2 = -30 / 180 * np.pi
+        vphi3 = 60 / 180 * np.pi  #SunYunru:增加更大角速度
+        vphi4 = -60 / 180 * np.pi
 
-        action_table = [[f0, vphi0], [f0, vphi1], [f0, vphi2],
-                        [f1, vphi0], [f1, vphi1], [f1, vphi2],
-                        [f2, vphi0], [f2, vphi1], [f2, vphi2]
+        action_table = [[f0, vphi0], [f0, vphi1], [f0, vphi2], [f0, vphi3], [f0, vphi4],
+                        [f1, vphi0], [f1, vphi1], [f1, vphi2], [f1, vphi3], [f1, vphi4],
+                        [f2, vphi0], [f2, vphi1], [f2, vphi2], [f2, vphi3], [f2, vphi4],
+                        [f3, vphi0], [f3, vphi1], [f3, vphi2], [f3, vphi3], [f3, vphi4]
                         ]
         return action_table
+
 
     def get_random_action(self):
         return random.randint(0, len(self.action_table)-1)

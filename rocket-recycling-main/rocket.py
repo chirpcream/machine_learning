@@ -313,6 +313,7 @@ class Rocket(object):
             else:
                 reward = dist_reward + pose_reward + fuel_bonus + precision_bonus
 
+        #Tanyingqi:奖励分解并记录
         self._last_reward_parts = {
         'dist_reward': float(dist_reward),
         'pose_reward': float(pose_reward),

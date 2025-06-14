@@ -78,9 +78,12 @@ class MLP(nn.Module):
         x = x.view([1, -1])
         x = self.mapping(x)
         if self.layer_norm:
-            x = self.relu(self.norm1(self.linear1(x)))
-            x = self.relu(self.norm2(self.linear2(x)))
-            x = self.relu(self.norm3(self.linear3(x)))
+            x = self.linear1(x)
+            x = self.relu(x + self.norm1(x))  #SunYunru:增加残差链接
+            x = self.linear2(x)
+            x = self.relu(x + self.norm2(x))
+            x = self.linear3(x)
+            x = self.relu(x + self.norm3(x))
         else:
             x = self.relu(self.linear1(x))
             x = self.relu(self.linear2(x))

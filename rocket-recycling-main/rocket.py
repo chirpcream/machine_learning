@@ -108,9 +108,9 @@ class Rocket(object):
         return self.flatten(self.state)
 
     def create_action_table(self):
-        f0 = 0.2 * self.g  # thrust
+        f0 = 0.1 * self.g  # thrust
         f1 = 1.0 * self.g
-        f2 = 2 * self.g
+        f2 = 2.2 * self.g
         vphi0 = 0  # Nozzle angular velocity
         vphi1 = 30 / 180 * np.pi
         vphi2 = -30 / 180 * np.pi
@@ -324,7 +324,7 @@ class Rocket(object):
         f_target, vphi = self.action_table[action]
 
         #TanYingqi:推力惯性参数
-        self._throttle_beta = 0.1 if not hasattr(self, '_throttle_beta') else self._throttle_beta  #SunYunru:降低推力惯性参数
+        self._throttle_beta = 0.05 if not hasattr(self, '_throttle_beta') else self._throttle_beta  #SunYunru:降低推力惯性参数
         self.f = self.f if hasattr(self, 'f') else f_target  #TanYingqi:初始化上次推力
 
         #TanYingqi:平滑更新推力（模拟推力惯性）
